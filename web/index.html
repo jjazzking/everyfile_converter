@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>변환 미리보기 콘솔</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%A7%BE%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --ground:#f4f6f5; --surface:#ffffff; --surface-2:#eaeeec; --surface-3:#e0e5e2;
+    --ink:#16201f; --ink-2:#4a5654; --ink-3:#7b8582;
+    --rule:#d7ddda; --rule-2:#b7c1bd;
+    --accent:#1c5468; --accent-ink:#1c5468; --accent-soft:#e0edf1; --accent-line:#9dc2ce;
+    --on-accent:#ffffff;
+    --chg:#8a5a12; --chg-bg:#fbf1dc; --chg-line:#e0bd7a;
+    --new:#26643f; --new-bg:#e4f1e9; --new-line:#8dc2a4;
+    --iss:#a33327; --iss-bg:#fbe9e6; --iss-line:#e0a096;
+    --shadow:0 1px 2px rgba(20,35,32,.06), 0 8px 22px -12px rgba(20,35,32,.28);
+    --sans:"IBM Plex Sans KR", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#111716; --surface:#19201f; --surface-2:#222a29; --surface-3:#2b3433;
+      --ink:#e7ecea; --ink-2:#a6b1ae; --ink-3:#79837f;
+      --rule:#2b3433; --rule-2:#3d4846;
+      --accent:#79b8cd; --accent-ink:#8ec6d9; --accent-soft:#16303a; --accent-line:#2f5a6b;
+      --on-accent:#0d1414;
+      --chg:#e2b263; --chg-bg:#312610; --chg-line:#6b5323;
+      --new:#84c8a0; --new-bg:#152d20; --new-line:#2f6244;
+      --iss:#f09386; --iss-bg:#361a16; --iss-line:#7a3830;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 22px -12px rgba(0,0,0,.75);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#111716; --surface:#19201f; --surface-2:#222a29; --surface-3:#2b3433;
+    --ink:#e7ecea; --ink-2:#a6b1ae; --ink-3:#79837f;
+    --rule:#2b3433; --rule-2:#3d4846;
+    --accent:#79b8cd; --accent-ink:#8ec6d9; --accent-soft:#16303a; --accent-line:#2f5a6b;
+    --on-accent:#0d1414;
+    --chg:#e2b263; --chg-bg:#312610; --chg-line:#6b5323;
+    --new:#84c8a0; --new-bg:#152d20; --new-line:#2f6244;
+    --iss:#f09386; --iss-bg:#361a16; --iss-line:#7a3830;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 22px -12px rgba(0,0,0,.75);
+  }
+
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--sans); font-size:13px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app { display:flex; flex-direction:column; min-height:100%; }
+
+  /* ---------- 상단 ---------- */
+  .chrome { background:var(--surface); border-bottom:1px solid var(--rule); }
+  .chrome-row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:11px 20px; }
+  .mark { display:flex; align-items:baseline; gap:9px; }
+  .mark b { font-weight:700; font-size:14px; letter-spacing:-.01em; }
+  .mark span { font-size:10.5px; color:var(--ink-3); letter-spacing:.09em; text-transform:uppercase; font-weight:500; }
+
+  .route { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:12px; }
+  .fmt {
+    padding:3px 9px; border:1px solid var(--rule-2); border-radius:3px;
+    background:var(--surface-2); font-weight:500; letter-spacing:.02em;
+  }
+  .arrow { color:var(--ink-3); }
+  .filename { color:var(--ink-2); font-family:var(--mono); font-size:12px; max-width:34ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .filename b { color:var(--ink); font-weight:500; }
+  .spacer { flex:1 1 auto; }
+
+  .btn {
+    font:inherit; font-size:12px; font-weight:500; padding:5px 12px; border-radius:3px;
+    border:1px solid var(--rule-2); background:var(--surface); color:var(--ink);
+    cursor:pointer; transition:background .12s, border-color .12s;
+  }
+  .btn:hover:not(:disabled) { background:var(--surface-2); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+  .btn-primary:hover:not(:disabled) { filter:brightness(1.08); background:var(--accent); }
+  .btn:focus-visible, select:focus-visible, .typebtn:focus-visible,
+  .chk:focus-visible, .cell:focus-visible, .segbtn:focus-visible {
+    outline:2px solid var(--accent); outline-offset:1px;
+  }
+
+  select {
+    font:inherit; font-size:12px; padding:4px 8px; border-radius:3px;
+    border:1px solid var(--rule-2); background:var(--surface); color:var(--ink);
+  }
+
+  /* ---------- 툴바 ---------- */
+  .toolbar {
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:8px 20px; background:var(--surface-2); border-bottom:1px solid var(--rule);
+    font-size:12px; min-height:38px;
+  }
+  .sample { color:var(--ink-2); font-family:var(--mono); font-size:11.5px; }
+  .sample b { color:var(--ink); font-weight:500; }
+  .checks { display:flex; gap:14px; align-items:center; }
+  .chk { display:flex; align-items:center; gap:6px; cursor:pointer; color:var(--ink-2); user-select:none; }
+  .chk input { accent-color:var(--accent); margin:0; width:13px; height:13px; }
+  .legend { display:flex; gap:13px; align-items:center; flex-wrap:wrap; }
+  .lg { display:flex; align-items:center; gap:5px; color:var(--ink-2); font-size:11.5px; }
+  .sw { width:11px; height:11px; border-radius:2px; border:1px solid; flex:none; }
+  .sw-chg { background:var(--chg-bg); border-color:var(--chg-line); }
+  .sw-new { background:var(--new-bg); border-color:var(--new-line); }
+  .sw-iss { background:var(--iss-bg); border-color:var(--iss-line); }
+
+  .busy { color:var(--accent-ink); font-family:var(--mono); font-size:11.5px; }
+  .busy[hidden] { display:none; }
+
+  /* ---------- 안내 / 오류 ---------- */
+  .notes { padding:0 20px; background:var(--ground); }
+  .notes:empty { display:none; }
+  .note {
+    display:flex; gap:8px; align-items:flex-start; padding:7px 0;
+    border-bottom:1px solid var(--rule); color:var(--ink-2); font-size:12px;
+  }
+  .note:last-child { border-bottom:none; }
+  .note .tag {
+    flex:none; font-family:var(--mono); font-size:10px; letter-spacing:.04em;
+    padding:1px 6px; border-radius:2px; margin-top:1px;
+    background:var(--surface-2); border:1px solid var(--rule-2); color:var(--ink-3);
+  }
+  .note.err .tag { background:var(--iss-bg); border-color:var(--iss-line); color:var(--iss); }
+  .note.err { color:var(--iss); }
+
+  /* ---------- 작업 영역 ---------- */
+  .workspace { display:grid; grid-template-columns:1fr 1fr; flex:1 1 auto; min-height:0; }
+  @media (max-width:960px) { .workspace { grid-template-columns:1fr; } }
+  .pane { display:flex; flex-direction:column; min-width:0; background:var(--surface); }
+  .pane + .pane { border-left:1px solid var(--rule-2); }
+  @media (max-width:960px) { .pane + .pane { border-left:none; border-top:1px solid var(--rule-2); } }
+
+  .pane-head {
+    display:flex; align-items:center; gap:10px; padding:7px 14px;
+    border-bottom:1px solid var(--rule); background:var(--surface); flex-wrap:wrap;
+  }
+  .pane-title { font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); }
+  .pane-sub { font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+
+  .seg { display:flex; border:1px solid var(--rule-2); border-radius:3px; overflow:hidden; }
+  .segbtn { font:inherit; font-size:11.5px; font-weight:500; padding:3px 10px; border:none; background:var(--surface); color:var(--ink-3); cursor:pointer; }
+  .segbtn + .segbtn { border-left:1px solid var(--rule-2); }
+  .segbtn[aria-pressed="true"] { background:var(--accent-soft); color:var(--accent-ink); }
+
+  .scroller { overflow:auto; flex:1 1 auto; min-height:280px; max-height:min(560px, calc(100vh - 320px)); }
+
+  /* ---------- 그리드 ---------- */
+  table.grid { border-collapse:separate; border-spacing:0; width:100%; font-size:12px; }
+  .grid th, .grid td { border-right:1px solid var(--rule); border-bottom:1px solid var(--rule); padding:0; text-align:left; white-space:nowrap; }
+  .grid thead th { position:sticky; top:0; z-index:3; background:var(--surface-2); border-bottom:1px solid var(--rule-2); }
+  .colletter { font-family:var(--mono); font-size:10px; color:var(--ink-3); text-align:center; padding:2px 0; background:var(--surface-3); border-bottom:1px solid var(--rule); font-weight:500; letter-spacing:.04em; }
+  .colhead { padding:6px 9px 7px; display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
+  .colname { font-weight:600; font-size:12px; color:var(--ink); }
+  .colname.mono { font-family:var(--mono); font-size:11.5px; font-weight:500; }
+  .badges { display:flex; gap:4px; }
+
+  .typebtn {
+    font:inherit; font-family:var(--mono); font-size:10px; font-weight:500;
+    letter-spacing:.02em; padding:1px 6px; border-radius:2px; cursor:pointer;
+    border:1px solid var(--rule-2); background:var(--surface); color:var(--ink-2);
+    display:inline-flex; align-items:center; gap:4px; white-space:nowrap;
+  }
+  .typebtn:hover:not(.static) { border-color:var(--accent-line); color:var(--accent-ink); background:var(--accent-soft); }
+  .typebtn:not(.static)::after { content:"▾"; font-size:8px; opacity:.6; }
+  .typebtn.static { cursor:default; opacity:.7; }
+  .typebtn.unmapped { border-color:var(--iss-line); background:var(--iss-bg); color:var(--iss); }
+
+  .rownum {
+    position:sticky; left:0; z-index:2; background:var(--surface-3);
+    font-family:var(--mono); font-size:10.5px; color:var(--ink-3);
+    text-align:right; padding:0 7px; width:42px; min-width:42px;
+    border-right:1px solid var(--rule-2);
+  }
+  .grid thead .rownum { z-index:4; }
+
+  .cell { padding:5px 9px; font-family:var(--mono); font-size:11.5px; color:var(--ink); cursor:pointer; }
+  .cell.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .cell.txt { font-family:var(--sans); font-size:12px; }
+  .cell.nul { color:var(--ink-3); font-style:italic; }
+  .cell:hover { background:var(--accent-soft); }
+
+  tr.r-sel td { background:var(--accent-soft); }
+  tr.r-sel .rownum { background:var(--accent-line); color:var(--surface); }
+  .cell.c-sel { box-shadow:inset 0 0 0 2px var(--accent); background:var(--accent-soft); }
+
+  .cell.d-changed { background:var(--chg-bg); border-left:2px solid var(--chg-line); padding-left:7px; }
+  .cell.d-created { background:var(--new-bg); border-left:2px solid var(--new-line); padding-left:7px; }
+  .cell.d-issue   { background:var(--iss-bg); border-left:2px solid var(--iss-line); padding-left:7px; color:var(--iss); font-weight:500; }
+  .plain .cell.d-changed, .plain .cell.d-created { background:transparent; border-left:none; padding-left:9px; }
+
+  tr.r-subtotal td { background:var(--surface-2); color:var(--ink-2); font-weight:500; }
+  tr.r-gap td {
+    background:repeating-linear-gradient(135deg, transparent 0 6px, var(--surface-2) 6px 12px);
+    color:var(--ink-3); font-size:11px; padding:5px 9px; font-family:var(--sans);
+  }
+  .gapnote { display:inline-flex; align-items:center; gap:6px; background:var(--surface); padding:1px 8px; border-radius:2px; border:1px solid var(--rule); }
+
+  .empty-state { padding:40px 20px; text-align:center; color:var(--ink-3); font-size:12.5px; }
+
+  /* ---------- JSON ---------- */
+  .json { padding:14px 16px; font-family:var(--mono); font-size:11.5px; line-height:1.75; margin:0; }
+  .json .k { color:var(--accent-ink); }
+  .json .s { color:var(--new); }
+  .json .n { color:var(--chg); }
+  .json .p { color:var(--ink-3); }
+  .json .obj { display:block; border-left:2px solid transparent; padding-left:8px; margin-left:-10px; border-radius:2px; }
+  .json .obj.on { border-left-color:var(--accent); background:var(--accent-soft); }
+
+  /* ---------- 상태바 ---------- */
+  .status { border-top:1px solid var(--rule-2); background:var(--surface); display:flex; align-items:stretch; flex-wrap:wrap; }
+  .st-block { padding:8px 16px; border-right:1px solid var(--rule); min-width:0; }
+  .st-label { font-size:9.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3); font-weight:600; margin-bottom:3px; }
+  .st-val { font-family:var(--mono); font-size:12px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .st-val.muted { color:var(--ink-3); }
+  .st-rules { flex:1 1 260px; border-right:none; }
+  .rulechain { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .rule-pill { font-family:var(--mono); font-size:10.5px; padding:2px 7px; border-radius:2px; background:var(--surface-2); border:1px solid var(--rule); color:var(--ink-2); }
+  .rule-pill.warn { background:var(--iss-bg); border-color:var(--iss-line); color:var(--iss); }
+  .st-arrow { color:var(--ink-3); font-family:var(--mono); }
+
+  /* ---------- 이슈 ---------- */
+  .issues { border-top:1px solid var(--rule); background:var(--ground); padding:10px 20px 6px; }
+  .issues h2 { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); margin:0 0 7px; font-weight:600; }
+  .issue-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; max-height:150px; overflow-y:auto; }
+  .issue-list li { display:flex; gap:9px; align-items:baseline; font-size:12px; color:var(--ink-2); }
+  .issue-list .sev { font-family:var(--mono); font-size:10px; padding:1px 6px; border-radius:2px; flex:none; }
+  .sev.error { background:var(--iss-bg); border:1px solid var(--iss-line); color:var(--iss); }
+  .sev.warning { background:var(--chg-bg); border:1px solid var(--chg-line); color:var(--chg); }
+  .sev.info { background:var(--surface-2); border:1px solid var(--rule-2); color:var(--ink-3); }
+  .issue-list .row { font-family:var(--mono); font-size:11px; color:var(--ink-3); flex:none; }
+
+  .footnote { padding:10px 20px 22px; color:var(--ink-3); font-size:11px; border-top:1px solid var(--rule); background:var(--ground); }
+  .footnote b { color:var(--ink-2); font-weight:500; }
+
+  .drop-overlay {
+    position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center;
+    background:color-mix(in srgb, var(--ground) 82%, transparent); backdrop-filter:blur(2px);
+  }
+  .drop-overlay.on { display:flex; }
+  .drop-card { background:var(--surface); border:2px dashed var(--accent-line); border-radius:6px; padding:34px 48px; box-shadow:var(--shadow); color:var(--accent-ink); font-weight:500; }
+
+  [hidden] { display:none !important; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="chrome">
+    <div class="chrome-row">
+      <div class="mark"><b>변환 미리보기</b><span>everyfile</span></div>
+      <div class="route">
+        <span class="fmt" id="fmtIn">—</span><span class="arrow">→</span><span class="fmt" id="fmtOut">JSON</span>
+      </div>
+      <div class="filename" id="fileName">파일을 불러오는 중…</div>
+      <select id="sheetPicker" hidden aria-label="시트 선택"></select>
+      <div class="spacer"></div>
+      <input type="file" id="fileInput" accept=".xlsx,.xlsm,.csv,.tsv,.json" hidden>
+      <button class="btn" type="button" id="btnOpen">파일 열기</button>
+      <button class="btn" type="button" id="btnSample">예시 불러오기</button>
+      <button class="btn" type="button" id="btnSchema" disabled>JSON Schema</button>
+      <button class="btn btn-primary" type="button" id="btnConvert" disabled>변환해서 내려받기</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <span class="sample" id="samplingLabel">—</span>
+    <span class="busy" id="busy" hidden>계산 중…</span>
+    <div class="checks">
+      <label class="chk"><input type="checkbox" id="optHighlight" checked>변경 셀 강조</label>
+      <label class="chk"><input type="checkbox" id="optSync" checked>스크롤 동기화</label>
+    </div>
+    <div class="spacer"></div>
+    <div class="legend">
+      <span class="lg"><span class="sw sw-chg"></span>변환됨</span>
+      <span class="lg"><span class="sw sw-new"></span>신규 생성</span>
+      <span class="lg"><span class="sw sw-iss"></span>이슈</span>
+    </div>
+  </div>
+
+  <div class="notes" id="notes"></div>
+
+  <div class="workspace" id="workspace">
+    <section class="pane">
+      <div class="pane-head">
+        <span class="pane-title">변환 전 · 원본</span>
+        <span class="pane-sub" id="srcSub"></span>
+      </div>
+      <div class="scroller" id="scrollA"><table class="grid" id="gridSrc"></table></div>
+    </section>
+
+    <section class="pane">
+      <div class="pane-head">
+        <span class="pane-title">변환 후 · 결과</span>
+        <span class="pane-sub" id="outSub"></span>
+        <div class="spacer"></div>
+        <div class="seg">
+          <button class="segbtn" type="button" id="segGrid" aria-pressed="true">그리드</button>
+          <button class="segbtn" type="button" id="segJson" aria-pressed="false">JSON</button>
+        </div>
+      </div>
+      <div class="scroller" id="scrollB">
+        <table class="grid" id="gridOut"></table>
+        <pre class="json" id="jsonOut" hidden></pre>
+      </div>
+    </section>
+  </div>
+
+  <div class="status">
+    <div class="st-block" style="min-width:150px">
+      <div class="st-label">선택 셀</div><div class="st-val" id="stCell">—</div>
+    </div>
+    <div class="st-block" style="min-width:170px">
+      <div class="st-label">원본값</div><div class="st-val muted" id="stBefore">셀을 클릭하세요</div>
+    </div>
+    <div class="st-block" style="min-width:170px">
+      <div class="st-label">변환값</div><div class="st-val" id="stAfter">—</div>
+    </div>
+    <div class="st-block st-rules">
+      <div class="st-label">적용된 규칙</div>
+      <div class="rulechain" id="stRules"><span class="rule-pill">—</span></div>
+    </div>
+  </div>
+
+  <section class="issues" id="issuesBox" hidden>
+    <h2>검수 필요 <span id="issueCount"></span></h2>
+    <ul class="issue-list" id="issueList"></ul>
+  </section>
+
+  <p class="footnote">
+    컬럼 헤더의 <b>타입 배지</b>를 누르면 서버가 다시 계산합니다.
+    미리보기는 <b>표본</b>이며 내려받기는 전체 행을 변환합니다.
+  </p>
+</div>
+
+<div class="drop-overlay" id="dropOverlay"><div class="drop-card">여기에 파일을 놓으세요</div></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+  /* 타입 배지가 도는 순서. 원래 추론된 타입에 따라 후보가 달라진다. */
+  var CYCLES = {
+    date:    [{type:"date"}, {type:"date", format:"%Y/%m/%d"}, {type:"text"}],
+    code:    [{type:"code"}, {type:"integer"}, {type:"text"}],
+    integer: [{type:"integer"}, {type:"code"}, {type:"text"}],
+    decimal: [{type:"decimal"}, {type:"money"}, {type:"text"}],
+    money:   [{type:"money"}, {type:"money", format:"string"}, {type:"text"}],
+    text:    [{type:"text"}, {type:"code"}, {type:"money"}, {type:"date"}],
+    boolean: [{type:"boolean"}, {type:"text"}]
+  };
+
+  var TYPE_LABEL = {
+    text:"문자열", code:"코드(문자열)", integer:"정수",
+    decimal:"소수", money:"금액", date:"날짜", boolean:"참/거짓"
+  };
+
+  function typeLabel(field) {
+    if (field.type === "date") {
+      if (!field.format) return "날짜 ISO";
+      return "날짜 " + field.format.replace(/%Y/g, "Y").replace(/%m/g, "M").replace(/%d/g, "D");
+    }
+    if (field.type === "money" && field.format === "string") return "금액 원문";
+    return TYPE_LABEL[field.type] || field.type;
+  }
+
+  var state = {
+    fileId: null, origin: "", format: "", sheets: [], sheet: null,
+    profile: null, payload: null, baseTypes: {},
+    sel: { row: null, col: null }, showJson: false, busy: false
+  };
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  /* ------------------------------------------------------------------ 통신 */
+
+  function setBusy(on) {
+    state.busy = on;
+    $("busy").hidden = !on;
+    $("btnConvert").disabled = on || !state.fileId;
+    $("btnSchema").disabled = on || !state.fileId;
+  }
+
+  async function api(path, options) {
+    var res = await fetch(path, options);
+    if (!res.ok) {
+      var detail = res.statusText;
+      try { detail = (await res.json()).detail || detail; } catch (e) { /* 본문 없음 */ }
+      throw new Error(detail);
+    }
+    return res;
+  }
+
+  function showError(message) {
+    var box = $("notes");
+    var el = document.createElement("div");
+    el.className = "note err";
+    el.innerHTML = "<span class='tag'>오류</span><span>" + esc(message) + "</span>";
+    box.prepend(el);
+  }
+
+  async function loadFile(promise) {
+    setBusy(true);
+    $("notes").innerHTML = "";
+    try {
+      var data = await (await promise).json();
+      state.fileId = data.fileId;
+      state.origin = data.origin;
+      state.format = data.format;
+      state.sheets = data.sheets;
+      state.sheet = data.sheets.length ? data.sheets[0].name : null;
+      state.profile = data.profile;
+      state.baseTypes = {};
+      data.profile.fields.forEach(function (f) { state.baseTypes[f.key] = f.type; });
+      state.sel = { row: null, col: null };
+      applyPayload(data.preview);
+      renderChrome();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refresh() {
+    if (!state.fileId) return;
+    setBusy(true);
+    try {
+      var res = await api("/api/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: state.fileId, profile: state.profile, sheet: state.sheet })
+      });
+      applyPayload(await res.json());
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* ------------------------------------------------------------------ 렌더 */
+
+  function applyPayload(payload) {
+    state.payload = payload;
+    renderNotes();
+    renderSrc();
+    renderOut();
+    renderJson();
+    renderIssues();
+    $("samplingLabel").innerHTML = "샘플 <b>" + esc(payload.sampling.label) + "</b>";
+    $("srcSub").textContent = payload.sheet +
+      (payload.source.headerRow ? " · 헤더 " + payload.source.headerRow + "행" : " · 헤더 미검출");
+    $("outSub").textContent = payload.output.columns.length + "개 필드";
+    $("workspace").classList.toggle("plain", !$("optHighlight").checked);
+    applySelection();
+    updateStatus();
+  }
+
+  function renderChrome() {
+    $("fmtIn").textContent = (state.format || "").toUpperCase() || "—";
+    var parts = state.origin.split(/(?=[^/]+$)/);
+    $("fileName").innerHTML = "<b>" + esc(state.origin) + "</b>";
+
+    var picker = $("sheetPicker");
+    if (state.sheets.length > 1) {
+      picker.innerHTML = state.sheets.map(function (s) {
+        return "<option value='" + esc(s.name) + "'" +
+               (s.name === state.sheet ? " selected" : "") + ">" +
+               esc(s.name) + " (" + s.totalRows + "행)</option>";
+      }).join("");
+      picker.hidden = false;
+    } else {
+      picker.hidden = true;
+    }
+    $("btnConvert").disabled = !state.fileId;
+    $("btnSchema").disabled = !state.fileId;
+  }
+
+  function renderNotes() {
+    var notes = state.payload.notes || [];
+    $("notes").innerHTML = notes.map(function (n) {
+      return "<div class='note'><span class='tag'>안내</span><span>" + esc(n) + "</span></div>";
+    }).join("");
+  }
+
+  function renderSrc() {
+    var p = state.payload, header = p.source.header, rows = p.source.rows;
+    if (!rows.length) { $("gridSrc").innerHTML = emptyState("표시할 행이 없습니다"); return; }
+
+    var h = "<thead><tr><th class='rownum'><div class='colletter'>&nbsp;</div></th>";
+    header.forEach(function (name, i) {
+      h += "<th><div class='colletter'>" + (LETTERS[i] || i + 1) + "</div><div class='colhead'>" +
+           "<span class='colname'>" + esc(name) + "</span>" +
+           "<span class='typebtn static'>원본</span></div></th>";
+    });
+    h += "</tr></thead><tbody>";
+
+    rows.forEach(function (row) {
+      h += "<tr class='" + (row.kind === "subtotal" ? "r-subtotal" : "") + "' data-row='" + row.sourceRow + "'>";
+      h += "<td class='rownum'>" + row.sourceRow + "</td>";
+      header.forEach(function (_, i) {
+        var v = row.cells[i] == null ? "" : row.cells[i];
+        h += "<td class='cell txt' tabindex='0' data-r='" + row.sourceRow + "' data-src-col='" + i + "'>" +
+             esc(v) + "</td>";
+      });
+      h += "</tr>";
+    });
+    $("gridSrc").innerHTML = h + "</tbody>";
+  }
+
+  function renderOut() {
+    var p = state.payload, cols = p.output.columns, rows = p.output.rows;
+    if (!cols.length) { $("gridOut").innerHTML = emptyState("필드가 없습니다"); return; }
+
+    var h = "<thead><tr><th class='rownum'><div class='colletter'>&nbsp;</div></th>";
+    cols.forEach(function (col, i) {
+      var cycle = CYCLES[state.baseTypes[col.key]] || [];
+      var fixed = cycle.length < 2;
+      h += "<th><div class='colletter'>" + (i + 1) + "</div><div class='colhead'>" +
+           "<span class='colname mono'>" + esc(col.key) + "</span><span class='badges'>" +
+           "<button class='typebtn" + (fixed ? " static" : "") + "' type='button' data-typecol='" + i + "'>" +
+           esc(typeLabel(col)) + "</button>" +
+           (col.mapped ? "" : "<span class='typebtn static unmapped'>원본 열 없음</span>") +
+           "</span></div></th>";
+    });
+    h += "</tr></thead><tbody>";
+
+    var n = 0;
+    rows.forEach(function (row) {
+      if (!row.included) {
+        h += "<tr class='r-gap' data-row='" + row.sourceRow + "'><td class='rownum'>·</td>" +
+             "<td colspan='" + cols.length + "'><span class='gapnote'>" +
+             esc(row.dropReason || "제외됨") + " (원본 " + row.sourceRow + "행)</span></td></tr>";
+        return;
+      }
+      n++;
+      h += "<tr data-row='" + row.sourceRow + "'><td class='rownum'>" + n + "</td>";
+      row.cells.forEach(function (cell, i) {
+        var col = cols[i];
+        var cls = "cell";
+        if (col.type === "money" || col.type === "integer" || col.type === "decimal") {
+          if (col.format !== "string") cls += " num";
+        } else if (col.type === "text") { cls += " txt"; }
+        if (cell.display === "") cls += " nul";
+        if (cell.diff !== "unchanged") cls += " d-" + cell.diff;
+        h += "<td class='" + cls + "' tabindex='0' data-r='" + row.sourceRow + "' data-c='" + i + "'>" +
+             (cell.display === "" ? (cell.value === null ? "null" : "") : esc(cell.display)) + "</td>";
+      });
+      h += "</tr>";
+    });
+    $("gridOut").innerHTML = h + "</tbody>";
+  }
+
+  function renderJson() {
+    var p = state.payload, cols = p.output.columns;
+    var body = p.output.rows.filter(function (r) { return r.included; }).map(function (row) {
+      var lines = row.cells.map(function (cell, i) {
+        var v = cell.value, cls, text;
+        if (v === null) { cls = "p"; text = "null"; }
+        else if (typeof v === "number") { cls = "n"; text = String(v); }
+        else if (typeof v === "boolean") { cls = "n"; text = String(v); }
+        else { cls = "s"; text = JSON.stringify(String(v)); }
+        return "    <span class='k'>" + JSON.stringify(cols[i].key) + "</span>" +
+               "<span class='p'>:</span> <span class='" + cls + "'>" + esc(text) + "</span>";
+      });
+      return "  <span class='obj' data-row='" + row.sourceRow + "'>{\n" +
+             lines.join("<span class='p'>,</span>\n") + "\n  }</span>";
+    });
+    $("jsonOut").innerHTML = "<span class='p'>[</span>\n" +
+      body.join("<span class='p'>,</span>\n") + "\n<span class='p'>]</span>";
+  }
+
+  function renderIssues() {
+    var issues = state.payload.issues || [];
+    $("issuesBox").hidden = issues.length === 0;
+    $("issueCount").textContent = issues.length ? "· " + issues.length + "건 (표본 내)" : "";
+    $("issueList").innerHTML = issues.map(function (i) {
+      return "<li><span class='sev " + i.severity + "'>" + esc(i.severity) + "</span>" +
+             "<span class='row'>" + i.sourceRow + "행</span><span>" + esc(i.message) + "</span></li>";
+    }).join("");
+  }
+
+  function emptyState(text) {
+    return "<tbody><tr><td class='empty-state'>" + esc(text) + "</td></tr></tbody>";
+  }
+
+  /* ------------------------------------------------------------ 선택/상태바 */
+
+  function sourceColumnOf(outputIndex) {
+    var col = state.payload.output.columns[outputIndex];
+    return state.payload.source.header.indexOf(col.source);
+  }
+
+  function applySelection() {
+    document.querySelectorAll("tr.r-sel").forEach(function (el) { el.classList.remove("r-sel"); });
+    document.querySelectorAll(".cell.c-sel").forEach(function (el) { el.classList.remove("c-sel"); });
+    document.querySelectorAll("#jsonOut .obj.on").forEach(function (el) { el.classList.remove("on"); });
+    if (state.sel.row === null) return;
+
+    document.querySelectorAll("tr[data-row='" + state.sel.row + "']")
+      .forEach(function (el) { el.classList.add("r-sel"); });
+    var obj = document.querySelector("#jsonOut .obj[data-row='" + state.sel.row + "']");
+    if (obj) obj.classList.add("on");
+    if (state.sel.col === null) return;
+
+    var out = document.querySelector(
+      "#gridOut .cell[data-r='" + state.sel.row + "'][data-c='" + state.sel.col + "']");
+    if (out) out.classList.add("c-sel");
+    var srcCol = sourceColumnOf(state.sel.col);
+    if (srcCol >= 0) {
+      var src = document.querySelector(
+        "#gridSrc .cell[data-r='" + state.sel.row + "'][data-src-col='" + srcCol + "']");
+      if (src) src.classList.add("c-sel");
+    }
+  }
+
+  function updateStatus() {
+    var sel = state.sel;
+    if (sel.row === null || sel.col === null) {
+      $("stCell").textContent = "—";
+      $("stBefore").textContent = "셀을 클릭하세요";
+      $("stBefore").className = "st-val muted";
+      $("stAfter").textContent = "—";
+      $("stRules").innerHTML = "<span class='rule-pill'>—</span>";
+      return;
+    }
+
+    var p = state.payload;
+    var row = p.output.rows.find(function (r) { return r.sourceRow === sel.row; });
+    if (!row) return;
+    var cell = row.cells[sel.col], col = p.output.columns[sel.col];
+    var srcCol = sourceColumnOf(sel.col);
+    var srcRow = p.source.rows.find(function (r) { return r.sourceRow === sel.row; });
+    var raw = (srcRow && srcCol >= 0) ? srcRow.cells[srcCol] : "";
+
+    $("stCell").textContent =
+      (srcCol >= 0 ? (LETTERS[srcCol] || srcCol + 1) + sel.row : sel.row + "행") + " → " + col.key;
+    $("stBefore").textContent = raw === "" || raw == null ? "(빈 셀)" : raw;
+    $("stBefore").className = "st-val" + (raw === "" || raw == null ? " muted" : "");
+    $("stAfter").textContent =
+      cell.value === null ? "null"
+        : typeof cell.value === "string" ? JSON.stringify(cell.value) : String(cell.value);
+
+    var pills = cell.rules.map(function (r, i) {
+      var warn = cell.issues.length && i === cell.rules.length - 1;
+      return "<span class='rule-pill" + (warn ? " warn" : "") + "'>" + esc(r) + "</span>";
+    }).join("<span class='st-arrow'>›</span>");
+    if (cell.issues.length) {
+      pills += cell.issues.map(function (i) {
+        return "<span class='rule-pill warn'>" + esc(i.code) + "</span>";
+      }).join("");
+    }
+    $("stRules").innerHTML = pills || "<span class='rule-pill'>변경 없음</span>";
+  }
+
+  /* ------------------------------------------------------------------ 조작 */
+
+  document.addEventListener("click", function (e) {
+    var target = e.target;
+
+    var badge = target.closest("[data-typecol]");
+    if (badge && !badge.classList.contains("static")) {
+      cycleType(Number(badge.getAttribute("data-typecol")));
+      return;
+    }
+
+    var cell = target.closest(".cell[data-r]");
+    if (cell) {
+      state.sel.row = Number(cell.getAttribute("data-r"));
+      if (cell.hasAttribute("data-c")) {
+        state.sel.col = Number(cell.getAttribute("data-c"));
+      } else {
+        // 원본 쪽을 클릭했으면 같은 원본 열을 쓰는 출력 필드를 찾는다.
+        var srcCol = Number(cell.getAttribute("data-src-col"));
+        var name = state.payload.source.header[srcCol];
+        var idx = state.payload.output.columns.findIndex(function (c) { return c.source === name; });
+        state.sel.col = idx >= 0 ? idx : null;
+      }
+      applySelection();
+      updateStatus();
+      return;
+    }
+
+    var obj = target.closest("#jsonOut .obj");
+    if (obj) {
+      state.sel.row = Number(obj.getAttribute("data-row"));
+      applySelection();
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var el = document.activeElement;
+    if (el && el.classList && el.classList.contains("cell")) { e.preventDefault(); el.click(); }
+  });
+
+  function cycleType(index) {
+    var col = state.payload.output.columns[index];
+    var cycle = CYCLES[state.baseTypes[col.key]] || [];
+    if (cycle.length < 2) return;
+
+    var at = cycle.findIndex(function (o) {
+      return o.type === col.type && (o.format || null) === (col.format || null);
+    });
+    var next = cycle[(at + 1) % cycle.length];
+
+    var field = state.profile.fields.find(function (f) { return f.key === col.key; });
+    if (!field) return;
+    field.type = next.type;
+    field.format = next.format || null;
+    refresh();
+  }
+
+  $("optHighlight").addEventListener("change", function () {
+    $("workspace").classList.toggle("plain", !this.checked);
+  });
+
+  $("segGrid").addEventListener("click", function () { setOutputView(false); });
+  $("segJson").addEventListener("click", function () { setOutputView(true); });
+  function setOutputView(json) {
+    state.showJson = json;
+    $("gridOut").hidden = json;
+    $("jsonOut").hidden = !json;
+    $("segGrid").setAttribute("aria-pressed", String(!json));
+    $("segJson").setAttribute("aria-pressed", String(json));
+    applySelection();
+  }
+
+  var scrollLock = false;
+  function linkScroll(a, b) {
+    a.addEventListener("scroll", function () {
+      if (scrollLock || !$("optSync").checked || state.showJson) return;
+      scrollLock = true;
+      b.scrollTop = a.scrollTop;
+      requestAnimationFrame(function () { scrollLock = false; });
+    });
+  }
+  linkScroll($("scrollA"), $("scrollB"));
+  linkScroll($("scrollB"), $("scrollA"));
+
+  $("sheetPicker").addEventListener("change", function () {
+    state.sheet = this.value;
+    state.sel = { row: null, col: null };
+    refresh();
+  });
+
+  /* --------------------------------------------------------- 열기 / 내려받기 */
+
+  $("btnOpen").addEventListener("click", function () { $("fileInput").click(); });
+  $("fileInput").addEventListener("change", function () {
+    if (this.files && this.files[0]) upload(this.files[0]);
+    this.value = "";
+  });
+  $("btnSample").addEventListener("click", function () {
+    loadFile(api("/api/sample", { method: "POST" }));
+  });
+
+  function upload(file) {
+    var form = new FormData();
+    form.append("file", file);
+    loadFile(api("/api/files", { method: "POST", body: form }));
+  }
+
+  var dragDepth = 0;
+  window.addEventListener("dragenter", function (e) {
+    e.preventDefault(); dragDepth++; $("dropOverlay").classList.add("on");
+  });
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("dragleave", function () {
+    if (--dragDepth <= 0) { dragDepth = 0; $("dropOverlay").classList.remove("on"); }
+  });
+  window.addEventListener("drop", function (e) {
+    e.preventDefault(); dragDepth = 0; $("dropOverlay").classList.remove("on");
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]);
+  });
+
+  $("btnConvert").addEventListener("click", function () { download("json"); });
+  $("btnConvert").addEventListener("contextmenu", function (e) {
+    e.preventDefault();
+    download(prompt("출력 형식 (json / xlsx / csv)", "xlsx") || "xlsx");
+  });
+
+  /* Content-Disposition 에서 파일명을 꺼낸다.
+     한글 파일명은 RFC 5987 형식(filename*=utf-8''...)으로 오므로 그쪽을 먼저 본다.
+     `filename="..."` 만 보면 한글 이름이 전부 기본값으로 떨어진다. */
+  function filenameFrom(header) {
+    if (!header) return null;
+    var ext = header.match(/filename\*\s*=\s*utf-8''([^;]+)/i);
+    if (ext) {
+      try { return decodeURIComponent(ext[1].trim()); } catch (e) { /* 잘못된 인코딩 */ }
+    }
+    var plain = header.match(/filename\s*=\s*"?([^";]+)"?/i);
+    return plain ? plain[1].trim() : null;
+  }
+
+  async function download(format) {
+    if (!state.fileId) return;
+    setBusy(true);
+    try {
+      var res = await api("/api/convert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileId: state.fileId, profile: state.profile, sheet: state.sheet, format: format
+        })
+      });
+      var blob = await res.blob();
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = filenameFrom(res.headers.get("content-disposition")) || "converted." + format;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  $("btnSchema").addEventListener("click", async function () {
+    try {
+      var res = await api("/api/json-schema", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: state.fileId, profile: state.profile, sheet: state.sheet })
+      });
+      var schema = await res.json();
+      var blob = new Blob([JSON.stringify(schema, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = "schema.json";
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showError(err.message);
+    }
+  });
+
+  /* 첫 화면이 빈 상태로 열리지 않도록 예시를 불러온다. */
+  loadFile(api("/api/sample", { method: "POST" }));
+})();
+</script>
+</body>
+</html>

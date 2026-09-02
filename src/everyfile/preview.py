@@ -34,13 +34,25 @@ class Sampling:
     issues: int
     random: int
 
+    @property
+    def is_complete(self) -> bool:
+        return self.shown >= self.total
+
     def describe(self) -> str:
+        """표본이 전체를 덮으면 그렇게 말한다.
+
+        작은 파일에서까지 '상위 20행 + …' 이라고 쓰면 보지 못한 행이 있는 것처럼
+        읽혀, 사용자가 확인한 것을 불필요하게 의심하게 된다.
+        """
+        if self.is_complete:
+            return f"전체 {self.total:,}행"
+
         parts = [f"상위 {self.head}행"]
         if self.issues:
             parts.append(f"이슈 {self.issues}행")
         if self.random:
             parts.append(f"무작위 {self.random}행")
-        return " + ".join(parts) + f" · 전체 {self.total:,}행"
+        return " + ".join(parts) + f" · 전체 {self.total:,}행 중 {self.shown:,}행"
 
 
 def select_rows(result: ConversionResult) -> tuple[list[int], Sampling]:
@@ -165,6 +177,7 @@ def build_preview(table: TableIR, result: ConversionResult, profile: Profile) ->
         "sampling": {
             "total": sampling.total,
             "shown": sampling.shown,
+            "complete": sampling.is_complete,
             "head": sampling.head,
             "issues": sampling.issues,
             "random": sampling.random,
