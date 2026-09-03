@@ -174,7 +174,31 @@ def test_index_serves_the_dashboard(client):
     res = client.get("/")
     assert res.status_code == 200
     assert "변환 미리보기" in res.text
-    assert "/api/preview" in res.text
+    assert 'src="./app.js"' in res.text
+
+
+def test_page_does_not_talk_to_the_api_directly(client):
+    """화면이 실행 방식을 알면 안 된다 — 그래야 브라우저 실행으로 바꿔 끼울 수 있다.
+
+    이 불변조건이 깨지면 3단계(사내 서버)에서 화면을 통째로 다시 손대야 한다.
+    """
+    page = client.get("/").text
+    assert "fetch(" not in page
+    assert "/api/" not in page
+
+
+def test_static_assets_are_served(client):
+    """화면이 여러 파일로 나뉘었으므로 서버도 그것들을 내줘야 한다."""
+    for path in ("/app.js", "/backend.js", "/worker.js"):
+        res = client.get(path)
+        assert res.status_code == 200, path
+        assert "javascript" in res.headers["content-type"]
+
+
+def test_health_declares_the_engine(client):
+    """화면은 이 응답을 보고 서버 실행인지 브라우저 실행인지 고른다."""
+    body = client.get("/api/health").json()
+    assert body["engine"] == "server"
 
 
 def test_health_reports_supported_formats(client):
