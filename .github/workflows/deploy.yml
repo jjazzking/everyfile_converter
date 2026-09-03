@@ -1,0 +1,75 @@
+name: 테스트 및 배포
+
+# 테스트는 모든 브랜치에서 돌고, 배포는 main 만 한다.
+# 회계 자료를 다루는 도구라 깨진 변환 규칙이 조용히 올라가면 안 된다.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: 테스트
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install 3.11
+
+      # 로컬에서 검증한 것과 같은 명령을 쓴다. uv run 은 프로젝트를 다시 동기화할 수
+      # 있어, 무엇이 설치된 상태인지 CI 로그만 보고는 알기 어려워진다.
+      - name: 의존성 설치
+        run: |
+          uv venv
+          uv pip install -e ".[dev]"
+
+      - name: 린트
+        run: .venv/bin/python -m ruff check src tests scripts
+
+      - name: 테스트
+        run: .venv/bin/python -m pytest -q
+
+  build:
+    name: 사이트 조립
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install 3.11
+
+      - name: 빌드 도구 설치
+        run: |
+          uv venv
+          uv pip install build
+
+      # 엔진 휠을 사이트에 함께 넣는다. 브라우저가 실행 시점에 PyPI 를 부르지 않도록.
+      - name: 정적 사이트 조립
+        run: .venv/bin/python scripts/build_site.py
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Pages 배포
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

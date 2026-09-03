@@ -7,7 +7,10 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%A7%BE%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<!-- 폰트는 있으면 좋고 없어도 되는 것이다. media 를 바꿔 로드해 렌더와 스크립트 실행을
+     막지 않게 한다 — 사내망에서 외부 CDN 이 막히면 화면이 멈춘 것처럼 보이기 때문이다. -->
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
   :root {
     --ground:#f4f6f5; --surface:#ffffff; --surface-2:#eaeeec; --surface-3:#e0e5e2;
@@ -15,6 +18,7 @@
     --rule:#d7ddda; --rule-2:#b7c1bd;
     --accent:#1c5468; --accent-ink:#1c5468; --accent-soft:#e0edf1; --accent-line:#9dc2ce;
     --on-accent:#ffffff;
+    --ok:#26643f; --ok-bg:#e4f1e9; --ok-line:#8dc2a4;
     --chg:#8a5a12; --chg-bg:#fbf1dc; --chg-line:#e0bd7a;
     --new:#26643f; --new-bg:#e4f1e9; --new-line:#8dc2a4;
     --iss:#a33327; --iss-bg:#fbe9e6; --iss-line:#e0a096;
@@ -29,6 +33,7 @@
       --rule:#2b3433; --rule-2:#3d4846;
       --accent:#79b8cd; --accent-ink:#8ec6d9; --accent-soft:#16303a; --accent-line:#2f5a6b;
       --on-accent:#0d1414;
+      --ok:#84c8a0; --ok-bg:#152d20; --ok-line:#2f6244;
       --chg:#e2b263; --chg-bg:#312610; --chg-line:#6b5323;
       --new:#84c8a0; --new-bg:#152d20; --new-line:#2f6244;
       --iss:#f09386; --iss-bg:#361a16; --iss-line:#7a3830;
@@ -41,6 +46,7 @@
     --rule:#2b3433; --rule-2:#3d4846;
     --accent:#79b8cd; --accent-ink:#8ec6d9; --accent-soft:#16303a; --accent-line:#2f5a6b;
     --on-accent:#0d1414;
+    --ok:#84c8a0; --ok-bg:#152d20; --ok-line:#2f6244;
     --chg:#e2b263; --chg-bg:#312610; --chg-line:#6b5323;
     --new:#84c8a0; --new-bg:#152d20; --new-line:#2f6244;
     --iss:#f09386; --iss-bg:#361a16; --iss-line:#7a3830;
@@ -87,6 +93,7 @@
     outline:2px solid var(--accent); outline-offset:1px;
   }
 
+  select.fmt { font-family:var(--mono); padding:3px 7px; }
   select {
     font:inherit; font-size:12px; padding:4px 8px; border-radius:3px;
     border:1px solid var(--rule-2); background:var(--surface); color:var(--ink);
@@ -109,6 +116,13 @@
   .sw-chg { background:var(--chg-bg); border-color:var(--chg-line); }
   .sw-new { background:var(--new-bg); border-color:var(--new-line); }
   .sw-iss { background:var(--iss-bg); border-color:var(--iss-line); }
+
+  .engine {
+    font-family:var(--mono); font-size:11px; font-weight:500; padding:3px 9px;
+    border-radius:20px; border:1px solid var(--rule-2); background:var(--surface-2); color:var(--ink-3);
+    white-space:nowrap;
+  }
+  .engine.local { border-color:var(--ok-line); background:var(--ok-bg); color:var(--ok); }
 
   .busy { color:var(--accent-ink); font-family:var(--mono); font-size:11.5px; }
   .busy[hidden] { display:none; }
@@ -255,8 +269,14 @@
     <div class="chrome-row">
       <div class="mark"><b>변환 미리보기</b><span>everyfile</span></div>
       <div class="route">
-        <span class="fmt" id="fmtIn">—</span><span class="arrow">→</span><span class="fmt" id="fmtOut">JSON</span>
+        <span class="fmt" id="fmtIn">—</span><span class="arrow">→</span>
+        <select class="fmt" id="fmtOut" aria-label="출력 형식">
+          <option value="json">JSON</option>
+          <option value="xlsx">XLSX</option>
+          <option value="csv">CSV</option>
+        </select>
       </div>
+      <span class="engine" id="engineBadge">확인 중…</span>
       <div class="filename" id="fileName">파일을 불러오는 중…</div>
       <select id="sheetPicker" hidden aria-label="시트 선택"></select>
       <div class="spacer"></div>
@@ -264,7 +284,7 @@
       <button class="btn" type="button" id="btnOpen">파일 열기</button>
       <button class="btn" type="button" id="btnSample">예시 불러오기</button>
       <button class="btn" type="button" id="btnSchema" disabled>JSON Schema</button>
-      <button class="btn btn-primary" type="button" id="btnConvert" disabled>변환해서 내려받기</button>
+      <button class="btn btn-primary" type="button" id="btnConvert" disabled>전체 변환해서 내려받기</button>
     </div>
   </header>
 
@@ -340,520 +360,6 @@
 
 <div class="drop-overlay" id="dropOverlay"><div class="drop-card">여기에 파일을 놓으세요</div></div>
 
-<script>
-(function () {
-  "use strict";
-
-  var $ = function (id) { return document.getElementById(id); };
-  var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-
-  /* 타입 배지가 도는 순서. 원래 추론된 타입에 따라 후보가 달라진다. */
-  var CYCLES = {
-    date:    [{type:"date"}, {type:"date", format:"%Y/%m/%d"}, {type:"text"}],
-    code:    [{type:"code"}, {type:"integer"}, {type:"text"}],
-    integer: [{type:"integer"}, {type:"code"}, {type:"text"}],
-    decimal: [{type:"decimal"}, {type:"money"}, {type:"text"}],
-    money:   [{type:"money"}, {type:"money", format:"string"}, {type:"text"}],
-    text:    [{type:"text"}, {type:"code"}, {type:"money"}, {type:"date"}],
-    boolean: [{type:"boolean"}, {type:"text"}]
-  };
-
-  var TYPE_LABEL = {
-    text:"문자열", code:"코드(문자열)", integer:"정수",
-    decimal:"소수", money:"금액", date:"날짜", boolean:"참/거짓"
-  };
-
-  function typeLabel(field) {
-    if (field.type === "date") {
-      if (!field.format) return "날짜 ISO";
-      return "날짜 " + field.format.replace(/%Y/g, "Y").replace(/%m/g, "M").replace(/%d/g, "D");
-    }
-    if (field.type === "money" && field.format === "string") return "금액 원문";
-    return TYPE_LABEL[field.type] || field.type;
-  }
-
-  var state = {
-    fileId: null, origin: "", format: "", sheets: [], sheet: null,
-    profile: null, payload: null, baseTypes: {},
-    sel: { row: null, col: null }, showJson: false, busy: false
-  };
-
-  function esc(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-
-  /* ------------------------------------------------------------------ 통신 */
-
-  function setBusy(on) {
-    state.busy = on;
-    $("busy").hidden = !on;
-    $("btnConvert").disabled = on || !state.fileId;
-    $("btnSchema").disabled = on || !state.fileId;
-  }
-
-  async function api(path, options) {
-    var res = await fetch(path, options);
-    if (!res.ok) {
-      var detail = res.statusText;
-      try { detail = (await res.json()).detail || detail; } catch (e) { /* 본문 없음 */ }
-      throw new Error(detail);
-    }
-    return res;
-  }
-
-  function showError(message) {
-    var box = $("notes");
-    var el = document.createElement("div");
-    el.className = "note err";
-    el.innerHTML = "<span class='tag'>오류</span><span>" + esc(message) + "</span>";
-    box.prepend(el);
-  }
-
-  async function loadFile(promise) {
-    setBusy(true);
-    $("notes").innerHTML = "";
-    try {
-      var data = await (await promise).json();
-      state.fileId = data.fileId;
-      state.origin = data.origin;
-      state.format = data.format;
-      state.sheets = data.sheets;
-      state.sheet = data.sheets.length ? data.sheets[0].name : null;
-      state.profile = data.profile;
-      state.baseTypes = {};
-      data.profile.fields.forEach(function (f) { state.baseTypes[f.key] = f.type; });
-      state.sel = { row: null, col: null };
-      applyPayload(data.preview);
-      renderChrome();
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function refresh() {
-    if (!state.fileId) return;
-    setBusy(true);
-    try {
-      var res = await api("/api/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: state.fileId, profile: state.profile, sheet: state.sheet })
-      });
-      applyPayload(await res.json());
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /* ------------------------------------------------------------------ 렌더 */
-
-  function applyPayload(payload) {
-    state.payload = payload;
-    renderNotes();
-    renderSrc();
-    renderOut();
-    renderJson();
-    renderIssues();
-    $("samplingLabel").innerHTML = "샘플 <b>" + esc(payload.sampling.label) + "</b>";
-    $("srcSub").textContent = payload.sheet +
-      (payload.source.headerRow ? " · 헤더 " + payload.source.headerRow + "행" : " · 헤더 미검출");
-    $("outSub").textContent = payload.output.columns.length + "개 필드";
-    $("workspace").classList.toggle("plain", !$("optHighlight").checked);
-    applySelection();
-    updateStatus();
-  }
-
-  function renderChrome() {
-    $("fmtIn").textContent = (state.format || "").toUpperCase() || "—";
-    var parts = state.origin.split(/(?=[^/]+$)/);
-    $("fileName").innerHTML = "<b>" + esc(state.origin) + "</b>";
-
-    var picker = $("sheetPicker");
-    if (state.sheets.length > 1) {
-      picker.innerHTML = state.sheets.map(function (s) {
-        return "<option value='" + esc(s.name) + "'" +
-               (s.name === state.sheet ? " selected" : "") + ">" +
-               esc(s.name) + " (" + s.totalRows + "행)</option>";
-      }).join("");
-      picker.hidden = false;
-    } else {
-      picker.hidden = true;
-    }
-    $("btnConvert").disabled = !state.fileId;
-    $("btnSchema").disabled = !state.fileId;
-  }
-
-  function renderNotes() {
-    var notes = state.payload.notes || [];
-    $("notes").innerHTML = notes.map(function (n) {
-      return "<div class='note'><span class='tag'>안내</span><span>" + esc(n) + "</span></div>";
-    }).join("");
-  }
-
-  function renderSrc() {
-    var p = state.payload, header = p.source.header, rows = p.source.rows;
-    if (!rows.length) { $("gridSrc").innerHTML = emptyState("표시할 행이 없습니다"); return; }
-
-    var h = "<thead><tr><th class='rownum'><div class='colletter'>&nbsp;</div></th>";
-    header.forEach(function (name, i) {
-      h += "<th><div class='colletter'>" + (LETTERS[i] || i + 1) + "</div><div class='colhead'>" +
-           "<span class='colname'>" + esc(name) + "</span>" +
-           "<span class='typebtn static'>원본</span></div></th>";
-    });
-    h += "</tr></thead><tbody>";
-
-    rows.forEach(function (row) {
-      h += "<tr class='" + (row.kind === "subtotal" ? "r-subtotal" : "") + "' data-row='" + row.sourceRow + "'>";
-      h += "<td class='rownum'>" + row.sourceRow + "</td>";
-      header.forEach(function (_, i) {
-        var v = row.cells[i] == null ? "" : row.cells[i];
-        h += "<td class='cell txt' tabindex='0' data-r='" + row.sourceRow + "' data-src-col='" + i + "'>" +
-             esc(v) + "</td>";
-      });
-      h += "</tr>";
-    });
-    $("gridSrc").innerHTML = h + "</tbody>";
-  }
-
-  function renderOut() {
-    var p = state.payload, cols = p.output.columns, rows = p.output.rows;
-    if (!cols.length) { $("gridOut").innerHTML = emptyState("필드가 없습니다"); return; }
-
-    var h = "<thead><tr><th class='rownum'><div class='colletter'>&nbsp;</div></th>";
-    cols.forEach(function (col, i) {
-      var cycle = CYCLES[state.baseTypes[col.key]] || [];
-      var fixed = cycle.length < 2;
-      h += "<th><div class='colletter'>" + (i + 1) + "</div><div class='colhead'>" +
-           "<span class='colname mono'>" + esc(col.key) + "</span><span class='badges'>" +
-           "<button class='typebtn" + (fixed ? " static" : "") + "' type='button' data-typecol='" + i + "'>" +
-           esc(typeLabel(col)) + "</button>" +
-           (col.mapped ? "" : "<span class='typebtn static unmapped'>원본 열 없음</span>") +
-           "</span></div></th>";
-    });
-    h += "</tr></thead><tbody>";
-
-    var n = 0;
-    rows.forEach(function (row) {
-      if (!row.included) {
-        h += "<tr class='r-gap' data-row='" + row.sourceRow + "'><td class='rownum'>·</td>" +
-             "<td colspan='" + cols.length + "'><span class='gapnote'>" +
-             esc(row.dropReason || "제외됨") + " (원본 " + row.sourceRow + "행)</span></td></tr>";
-        return;
-      }
-      n++;
-      h += "<tr data-row='" + row.sourceRow + "'><td class='rownum'>" + n + "</td>";
-      row.cells.forEach(function (cell, i) {
-        var col = cols[i];
-        var cls = "cell";
-        if (col.type === "money" || col.type === "integer" || col.type === "decimal") {
-          if (col.format !== "string") cls += " num";
-        } else if (col.type === "text") { cls += " txt"; }
-        if (cell.display === "") cls += " nul";
-        if (cell.diff !== "unchanged") cls += " d-" + cell.diff;
-        h += "<td class='" + cls + "' tabindex='0' data-r='" + row.sourceRow + "' data-c='" + i + "'>" +
-             (cell.display === "" ? (cell.value === null ? "null" : "") : esc(cell.display)) + "</td>";
-      });
-      h += "</tr>";
-    });
-    $("gridOut").innerHTML = h + "</tbody>";
-  }
-
-  function renderJson() {
-    var p = state.payload, cols = p.output.columns;
-    var body = p.output.rows.filter(function (r) { return r.included; }).map(function (row) {
-      var lines = row.cells.map(function (cell, i) {
-        var v = cell.value, cls, text;
-        if (v === null) { cls = "p"; text = "null"; }
-        else if (typeof v === "number") { cls = "n"; text = String(v); }
-        else if (typeof v === "boolean") { cls = "n"; text = String(v); }
-        else { cls = "s"; text = JSON.stringify(String(v)); }
-        return "    <span class='k'>" + JSON.stringify(cols[i].key) + "</span>" +
-               "<span class='p'>:</span> <span class='" + cls + "'>" + esc(text) + "</span>";
-      });
-      return "  <span class='obj' data-row='" + row.sourceRow + "'>{\n" +
-             lines.join("<span class='p'>,</span>\n") + "\n  }</span>";
-    });
-    $("jsonOut").innerHTML = "<span class='p'>[</span>\n" +
-      body.join("<span class='p'>,</span>\n") + "\n<span class='p'>]</span>";
-  }
-
-  function renderIssues() {
-    var issues = state.payload.issues || [];
-    $("issuesBox").hidden = issues.length === 0;
-    $("issueCount").textContent = issues.length ? "· " + issues.length + "건 (표본 내)" : "";
-    $("issueList").innerHTML = issues.map(function (i) {
-      return "<li><span class='sev " + i.severity + "'>" + esc(i.severity) + "</span>" +
-             "<span class='row'>" + i.sourceRow + "행</span><span>" + esc(i.message) + "</span></li>";
-    }).join("");
-  }
-
-  function emptyState(text) {
-    return "<tbody><tr><td class='empty-state'>" + esc(text) + "</td></tr></tbody>";
-  }
-
-  /* ------------------------------------------------------------ 선택/상태바 */
-
-  function sourceColumnOf(outputIndex) {
-    var col = state.payload.output.columns[outputIndex];
-    return state.payload.source.header.indexOf(col.source);
-  }
-
-  function applySelection() {
-    document.querySelectorAll("tr.r-sel").forEach(function (el) { el.classList.remove("r-sel"); });
-    document.querySelectorAll(".cell.c-sel").forEach(function (el) { el.classList.remove("c-sel"); });
-    document.querySelectorAll("#jsonOut .obj.on").forEach(function (el) { el.classList.remove("on"); });
-    if (state.sel.row === null) return;
-
-    document.querySelectorAll("tr[data-row='" + state.sel.row + "']")
-      .forEach(function (el) { el.classList.add("r-sel"); });
-    var obj = document.querySelector("#jsonOut .obj[data-row='" + state.sel.row + "']");
-    if (obj) obj.classList.add("on");
-    if (state.sel.col === null) return;
-
-    var out = document.querySelector(
-      "#gridOut .cell[data-r='" + state.sel.row + "'][data-c='" + state.sel.col + "']");
-    if (out) out.classList.add("c-sel");
-    var srcCol = sourceColumnOf(state.sel.col);
-    if (srcCol >= 0) {
-      var src = document.querySelector(
-        "#gridSrc .cell[data-r='" + state.sel.row + "'][data-src-col='" + srcCol + "']");
-      if (src) src.classList.add("c-sel");
-    }
-  }
-
-  function updateStatus() {
-    var sel = state.sel;
-    if (sel.row === null || sel.col === null) {
-      $("stCell").textContent = "—";
-      $("stBefore").textContent = "셀을 클릭하세요";
-      $("stBefore").className = "st-val muted";
-      $("stAfter").textContent = "—";
-      $("stRules").innerHTML = "<span class='rule-pill'>—</span>";
-      return;
-    }
-
-    var p = state.payload;
-    var row = p.output.rows.find(function (r) { return r.sourceRow === sel.row; });
-    if (!row) return;
-    var cell = row.cells[sel.col], col = p.output.columns[sel.col];
-    var srcCol = sourceColumnOf(sel.col);
-    var srcRow = p.source.rows.find(function (r) { return r.sourceRow === sel.row; });
-    var raw = (srcRow && srcCol >= 0) ? srcRow.cells[srcCol] : "";
-
-    $("stCell").textContent =
-      (srcCol >= 0 ? (LETTERS[srcCol] || srcCol + 1) + sel.row : sel.row + "행") + " → " + col.key;
-    $("stBefore").textContent = raw === "" || raw == null ? "(빈 셀)" : raw;
-    $("stBefore").className = "st-val" + (raw === "" || raw == null ? " muted" : "");
-    $("stAfter").textContent =
-      cell.value === null ? "null"
-        : typeof cell.value === "string" ? JSON.stringify(cell.value) : String(cell.value);
-
-    var pills = cell.rules.map(function (r, i) {
-      var warn = cell.issues.length && i === cell.rules.length - 1;
-      return "<span class='rule-pill" + (warn ? " warn" : "") + "'>" + esc(r) + "</span>";
-    }).join("<span class='st-arrow'>›</span>");
-    if (cell.issues.length) {
-      pills += cell.issues.map(function (i) {
-        return "<span class='rule-pill warn'>" + esc(i.code) + "</span>";
-      }).join("");
-    }
-    $("stRules").innerHTML = pills || "<span class='rule-pill'>변경 없음</span>";
-  }
-
-  /* ------------------------------------------------------------------ 조작 */
-
-  document.addEventListener("click", function (e) {
-    var target = e.target;
-
-    var badge = target.closest("[data-typecol]");
-    if (badge && !badge.classList.contains("static")) {
-      cycleType(Number(badge.getAttribute("data-typecol")));
-      return;
-    }
-
-    var cell = target.closest(".cell[data-r]");
-    if (cell) {
-      state.sel.row = Number(cell.getAttribute("data-r"));
-      if (cell.hasAttribute("data-c")) {
-        state.sel.col = Number(cell.getAttribute("data-c"));
-      } else {
-        // 원본 쪽을 클릭했으면 같은 원본 열을 쓰는 출력 필드를 찾는다.
-        var srcCol = Number(cell.getAttribute("data-src-col"));
-        var name = state.payload.source.header[srcCol];
-        var idx = state.payload.output.columns.findIndex(function (c) { return c.source === name; });
-        state.sel.col = idx >= 0 ? idx : null;
-      }
-      applySelection();
-      updateStatus();
-      return;
-    }
-
-    var obj = target.closest("#jsonOut .obj");
-    if (obj) {
-      state.sel.row = Number(obj.getAttribute("data-row"));
-      applySelection();
-    }
-  });
-
-  document.addEventListener("keydown", function (e) {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    var el = document.activeElement;
-    if (el && el.classList && el.classList.contains("cell")) { e.preventDefault(); el.click(); }
-  });
-
-  function cycleType(index) {
-    var col = state.payload.output.columns[index];
-    var cycle = CYCLES[state.baseTypes[col.key]] || [];
-    if (cycle.length < 2) return;
-
-    var at = cycle.findIndex(function (o) {
-      return o.type === col.type && (o.format || null) === (col.format || null);
-    });
-    var next = cycle[(at + 1) % cycle.length];
-
-    var field = state.profile.fields.find(function (f) { return f.key === col.key; });
-    if (!field) return;
-    field.type = next.type;
-    field.format = next.format || null;
-    refresh();
-  }
-
-  $("optHighlight").addEventListener("change", function () {
-    $("workspace").classList.toggle("plain", !this.checked);
-  });
-
-  $("segGrid").addEventListener("click", function () { setOutputView(false); });
-  $("segJson").addEventListener("click", function () { setOutputView(true); });
-  function setOutputView(json) {
-    state.showJson = json;
-    $("gridOut").hidden = json;
-    $("jsonOut").hidden = !json;
-    $("segGrid").setAttribute("aria-pressed", String(!json));
-    $("segJson").setAttribute("aria-pressed", String(json));
-    applySelection();
-  }
-
-  var scrollLock = false;
-  function linkScroll(a, b) {
-    a.addEventListener("scroll", function () {
-      if (scrollLock || !$("optSync").checked || state.showJson) return;
-      scrollLock = true;
-      b.scrollTop = a.scrollTop;
-      requestAnimationFrame(function () { scrollLock = false; });
-    });
-  }
-  linkScroll($("scrollA"), $("scrollB"));
-  linkScroll($("scrollB"), $("scrollA"));
-
-  $("sheetPicker").addEventListener("change", function () {
-    state.sheet = this.value;
-    state.sel = { row: null, col: null };
-    refresh();
-  });
-
-  /* --------------------------------------------------------- 열기 / 내려받기 */
-
-  $("btnOpen").addEventListener("click", function () { $("fileInput").click(); });
-  $("fileInput").addEventListener("change", function () {
-    if (this.files && this.files[0]) upload(this.files[0]);
-    this.value = "";
-  });
-  $("btnSample").addEventListener("click", function () {
-    loadFile(api("/api/sample", { method: "POST" }));
-  });
-
-  function upload(file) {
-    var form = new FormData();
-    form.append("file", file);
-    loadFile(api("/api/files", { method: "POST", body: form }));
-  }
-
-  var dragDepth = 0;
-  window.addEventListener("dragenter", function (e) {
-    e.preventDefault(); dragDepth++; $("dropOverlay").classList.add("on");
-  });
-  window.addEventListener("dragover", function (e) { e.preventDefault(); });
-  window.addEventListener("dragleave", function () {
-    if (--dragDepth <= 0) { dragDepth = 0; $("dropOverlay").classList.remove("on"); }
-  });
-  window.addEventListener("drop", function (e) {
-    e.preventDefault(); dragDepth = 0; $("dropOverlay").classList.remove("on");
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]);
-  });
-
-  $("btnConvert").addEventListener("click", function () { download("json"); });
-  $("btnConvert").addEventListener("contextmenu", function (e) {
-    e.preventDefault();
-    download(prompt("출력 형식 (json / xlsx / csv)", "xlsx") || "xlsx");
-  });
-
-  /* Content-Disposition 에서 파일명을 꺼낸다.
-     한글 파일명은 RFC 5987 형식(filename*=utf-8''...)으로 오므로 그쪽을 먼저 본다.
-     `filename="..."` 만 보면 한글 이름이 전부 기본값으로 떨어진다. */
-  function filenameFrom(header) {
-    if (!header) return null;
-    var ext = header.match(/filename\*\s*=\s*utf-8''([^;]+)/i);
-    if (ext) {
-      try { return decodeURIComponent(ext[1].trim()); } catch (e) { /* 잘못된 인코딩 */ }
-    }
-    var plain = header.match(/filename\s*=\s*"?([^";]+)"?/i);
-    return plain ? plain[1].trim() : null;
-  }
-
-  async function download(format) {
-    if (!state.fileId) return;
-    setBusy(true);
-    try {
-      var res = await api("/api/convert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileId: state.fileId, profile: state.profile, sheet: state.sheet, format: format
-        })
-      });
-      var blob = await res.blob();
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = filenameFrom(res.headers.get("content-disposition")) || "converted." + format;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  $("btnSchema").addEventListener("click", async function () {
-    try {
-      var res = await api("/api/json-schema", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: state.fileId, profile: state.profile, sheet: state.sheet })
-      });
-      var schema = await res.json();
-      var blob = new Blob([JSON.stringify(schema, null, 2)], { type: "application/json" });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url; a.download = "schema.json";
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      showError(err.message);
-    }
-  });
-
-  /* 첫 화면이 빈 상태로 열리지 않도록 예시를 불러온다. */
-  loadFile(api("/api/sample", { method: "POST" }));
-})();
-</script>
+<script type="module" src="./app.js"></script>
 </body>
 </html>

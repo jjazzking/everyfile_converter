@@ -1,50 +1,58 @@
 """미리보기 대시보드용 HTTP API.
 
+여기는 얇은 껍데기다. 실제 동작은 ``everyfile.session.Session`` 에 있고, 브라우저에서
+도는 Pyodide 워커도 같은 클래스를 쓴다. 두 실행 환경이 서로 다른 코드를 타면
+"브라우저에선 되는데 서버에선 값이 다르다" 가 생긴다.
+
 화면은 프로파일을 통째로 들고 있다가 매 요청에 실어 보낸다. 서버가 세션 상태로
 프로파일을 들고 있으면 여러 탭에서 같은 파일을 다른 규칙으로 보는 순간 서로를
-덮어쓰기 때문이다. 서버가 보관하는 것은 업로드된 원본 파일뿐이다.
+덮어쓰기 때문이다.
 
-주의: 업로드 저장소는 프로세스 메모리 + 임시 디렉터리이므로 재시작하면 사라지고
-여러 워커로 띄우면 공유되지 않는다. 사내 단일 인스턴스 용도의 MVP다.
+주의: 저장소는 임시 디렉터리이므로 재시작하면 사라지고, 여러 워커로 띄우면 공유되지
+않는다. 사내 단일 인스턴스 용도의 MVP다.
 """
 
 from __future__ import annotations
 
+import io
+import json
 import shutil
 import tempfile
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from fastapi import Body, FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import samples
-from .ir import Document
-from .pipeline import build
 from .profile import Profile
 from .readers import SUPPORTED as READ_FORMATS
-from .readers import read
+from .session import Session, SessionError
 from .writers import SUPPORTED as WRITE_FORMATS
 
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-"""업로드 상한. 이보다 큰 장부는 CLI 로 배치 처리하는 편이 맞다."""
-
 WEB_ROOT = Path(__file__).resolve().parents[2] / "web"
+
+STATUS = {
+    "unsupported_format": 400,
+    "bad_profile": 400,
+    "too_large": 413,
+    "unreadable": 422,
+    "not_found": 404,
+    "invalid": 422,
+}
 
 app = FastAPI(title="everyfile 변환 미리보기", version="0.1.0")
 
 _storage = Path(tempfile.mkdtemp(prefix="everyfile-"))
-_uploads: dict[str, dict[str, Any]] = {}
+_session = Session(storage=_storage / "files")
 _profiles_dir = _storage / "profiles"
-_profiles_dir.mkdir(exist_ok=True)
+_profiles_dir.mkdir(parents=True, exist_ok=True)
 
 
-# ---------------------------------------------------------------------------
-# 요청 모델
-# ---------------------------------------------------------------------------
+def _handle(exc: SessionError) -> HTTPException:
+    return HTTPException(STATUS.get(exc.code, 422), str(exc))
 
 
 class PreviewRequest(BaseModel):
@@ -57,6 +65,7 @@ class PreviewRequest(BaseModel):
 
 class ConvertRequest(PreviewRequest):
     format: str = "json"
+    encoding: str = "utf-8-sig"
 
 
 class SaveProfileRequest(BaseModel):
@@ -64,78 +73,26 @@ class SaveProfileRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# 업로드
+# 열기
 # ---------------------------------------------------------------------------
-
-
-def _register(name: str, data: bytes) -> dict[str, Any]:
-    """파일을 저장하고 프로파일 초안까지 만들어 돌려준다.
-
-    저장 경로는 UUID 로 짓고 원본 파일명은 메타데이터로만 들고 있는다. 업로드된
-    이름을 경로에 그대로 쓰면 경로 이탈(``../``)에 노출된다.
-    """
-    suffix = Path(name).suffix.lower()
-    if suffix not in READ_FORMATS:
-        raise HTTPException(
-            400,
-            f"지원하지 않는 형식입니다: {suffix or '(확장자 없음)'}"
-            f" — 가능: {', '.join(READ_FORMATS)}",
-        )
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            413,
-            f"파일이 너무 큽니다 ({len(data) / 1e6:.1f}MB)"
-            f" — 상한 {MAX_UPLOAD_BYTES // 10**6}MB",
-        )
-
-    file_id = uuid.uuid4().hex
-    path = _storage / f"{file_id}{suffix}"
-    path.write_bytes(data)
-
-    try:
-        document = read(path)
-        job = build(document)
-    except Exception as exc:
-        path.unlink(missing_ok=True)
-        raise HTTPException(422, f"파일을 읽지 못했습니다: {exc}") from exc
-
-    _uploads[file_id] = {
-        "path": path,
-        "document": document,
-        "origin": Path(name).name,
-        "uploaded_at": datetime.now(UTC).isoformat(),
-    }
-
-    return {
-        "fileId": file_id,
-        "origin": Path(name).name,
-        "format": suffix.lstrip("."),
-        "sheets": [
-            {
-                "name": t.name,
-                "headerRow": t.header_row,
-                "header": t.header,
-                "totalRows": t.total_data_rows,
-                "encoding": t.encoding,
-                "notes": t.notes,
-            }
-            for t in job.document.tables
-        ],
-        "profile": job.profile.to_dict(),
-        "preview": job.preview(),
-    }
 
 
 @app.post("/api/files")
 async def upload(file: UploadFile = File(...)) -> dict:
     data = await file.read()
-    return _register(file.filename or "upload", data)
+    try:
+        return _session.open(file.filename or "upload", data)
+    except SessionError as exc:
+        raise _handle(exc) from exc
 
 
 @app.post("/api/sample")
 def load_sample() -> dict:
     """예시 장부를 등록한다. 첫 화면이 빈 상태로 열리지 않게 하는 용도."""
-    return _register(samples.SAMPLE_NAME, samples.sample_bytes())
+    try:
+        return _session.open(samples.SAMPLE_NAME, samples.sample_bytes())
+    except SessionError as exc:
+        raise _handle(exc) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -143,61 +100,52 @@ def load_sample() -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _job(req: PreviewRequest):
-    entry = _uploads.get(req.file_id)
-    if entry is None:
-        raise HTTPException(404, "업로드를 찾을 수 없습니다 — 파일을 다시 올려주세요")
-
-    profile = None
-    if req.profile is not None:
-        try:
-            profile = Profile.from_dict(req.profile)
-        except (KeyError, ValueError) as exc:
-            raise HTTPException(400, f"프로파일이 올바르지 않습니다: {exc}") from exc
-
-    # 파싱 결과를 재사용한다 — 타입을 바꿀 때마다 파일을 다시 읽으면 클릭이 느려진다.
-    document: Document = entry["document"]
-    try:
-        return build(document, profile=profile, sheet=req.sheet)
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
-
-
 @app.post("/api/preview")
 def preview(req: PreviewRequest = Body(...)) -> dict:
-    """프로파일을 바꿀 때마다 호출된다 — 타입 배지를 누르면 곧바로 여기로 온다."""
-    return _job(req).preview()
+    try:
+        return _session.preview(req.file_id, req.profile, req.sheet)
+    except SessionError as exc:
+        raise _handle(exc) from exc
 
 
 @app.post("/api/convert")
-def convert(req: ConvertRequest = Body(...)) -> FileResponse:
-    suffix = "." + req.format.lstrip(".").lower()
-    if suffix not in WRITE_FORMATS:
-        raise HTTPException(
-            400, f"지원하지 않는 출력 형식입니다 — 가능: {', '.join(WRITE_FORMATS)}"
+def convert(req: ConvertRequest = Body(...)) -> StreamingResponse:
+    kwargs = {"encoding": req.encoding} if req.format.lower() in ("csv", "tsv") else {}
+    try:
+        data, filename, summary = _session.convert(
+            req.file_id, req.profile, req.sheet, req.format, **kwargs
         )
+    except SessionError as exc:
+        raise _handle(exc) from exc
 
-    job = _job(req)
-    stem = Path(_uploads[req.file_id]["origin"]).stem
-    out = _storage / f"{uuid.uuid4().hex}{suffix}"
-    job.save(out)
-
-    return FileResponse(
-        out,
-        filename=f"{stem}{suffix}",
+    return StreamingResponse(
+        io.BytesIO(data),
         media_type="application/octet-stream",
         headers={
+            "Content-Disposition": _disposition(filename),
             # 화면이 다운로드 후에도 검수 상태를 표시할 수 있도록 요약을 헤더로 보낸다.
-            "X-Everyfile-Rows": str(len(job.result.records)),
-            "X-Everyfile-Issues": str(len(job.result.issues)),
-            "X-Everyfile-Errors": str(job.result.error_count),
+            "X-Everyfile-Rows": str(summary["rows"]),
+            "X-Everyfile-Issues": str(summary["issues"]),
+            "X-Everyfile-Errors": str(summary["errors"]),
+            "Access-Control-Expose-Headers": "Content-Disposition, X-Everyfile-Rows,"
+            " X-Everyfile-Issues, X-Everyfile-Errors",
         },
     )
 
 
+def _disposition(filename: str) -> str:
+    """한글 파일명은 RFC 5987 로 인코딩해 보낸다."""
+    from urllib.parse import quote
+
+    return f"attachment; filename*=utf-8''{quote(filename)}"
+
+
 @app.post("/api/json-schema")
 def json_schema(req: PreviewRequest = Body(...)) -> dict:
-    return _job(req).profile.to_json_schema()
+    try:
+        return _session.json_schema(req.file_id, req.profile, req.sheet)
+    except SessionError as exc:
+        raise _handle(exc) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +159,7 @@ def list_profiles() -> list[dict]:
     for path in sorted(_profiles_dir.glob("*.json")):
         try:
             profile = Profile.load(path)
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, json.JSONDecodeError):
             continue
         out.append(
             {
@@ -228,7 +176,7 @@ def list_profiles() -> list[dict]:
 def save_profile(req: SaveProfileRequest = Body(...)) -> dict:
     try:
         profile = Profile.from_dict(req.profile)
-    except (KeyError, ValueError) as exc:
+    except (KeyError, ValueError, TypeError) as exc:
         raise HTTPException(400, f"프로파일이 올바르지 않습니다: {exc}") from exc
 
     profile_id = uuid.uuid4().hex[:12]
@@ -252,6 +200,18 @@ def get_profile(profile_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
+@app.get("/api/health")
+def health() -> dict:
+    """화면이 실행 방식을 고르는 데 쓴다 — 이 응답이 있으면 서버 실행."""
+    return {
+        "status": "ok",
+        "engine": "server",
+        "read": list(READ_FORMATS),
+        "write": list(WRITE_FORMATS),
+        "open": len(_session.files),
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     page = WEB_ROOT / "index.html"
@@ -260,14 +220,8 @@ def index() -> HTMLResponse:
     return HTMLResponse(page.read_text(encoding="utf-8"))
 
 
-@app.get("/api/health")
-def health() -> dict:
-    return {
-        "status": "ok",
-        "read": list(READ_FORMATS),
-        "write": list(WRITE_FORMATS),
-        "uploads": len(_uploads),
-    }
+if WEB_ROOT.exists():  # pragma: no cover - 배포 형태에 따라 없을 수 있다
+    app.mount("/", StaticFiles(directory=WEB_ROOT), name="web")
 
 
 def cleanup() -> None:
