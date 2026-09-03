@@ -9,7 +9,18 @@
  */
 
 const PYODIDE_VERSION = "314.0.6";
-const PYODIDE_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+
+/**
+ * 배포판(`/pyodide/vX/full/`) 이 아니라 npm 배포본을 쓴다.
+ *
+ * 우리는 Pyodide 가 함께 배포하는 패키지를 하나도 쓰지 않는다 — openpyxl 을 포함해
+ * 필요한 것은 전부 아래 WHEELS 로 직접 싣기 때문이다. 그래서 코어만 있는 npm 배포본으로
+ * 충분하고, 받는 양도 적다.
+ *
+ * 2단계에서 PDF 를 붙일 때는 Pillow·cryptography 같은 네이티브 패키지가 필요해지므로
+ * `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/` 로 바꿔야 한다.
+ */
+const PYODIDE_URL = `https://cdn.jsdelivr.net/npm/pyodide@${PYODIDE_VERSION}/`;
 
 /** 사이트에 함께 배포되는 순수 파이썬 휠들. 설치 순서가 의존성 순서다. */
 const WHEELS = [
