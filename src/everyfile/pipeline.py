@@ -36,8 +36,21 @@ def load(
     sheet: str | None = None,
 ) -> Job:
     """파일을 읽고 프로파일을 적용한다. 프로파일이 없으면 추론해서 초안을 만든다."""
-    document = read(source)
+    return build(read(source), profile=profile, sheet=sheet)
 
+
+def build(
+    document: Document,
+    *,
+    profile: Profile | None = None,
+    sheet: str | None = None,
+) -> Job:
+    """이미 읽어둔 문서에 프로파일을 적용한다.
+
+    ``load`` 와 분리해 둔 이유는 화면 때문이다. 타입 배지를 누를 때마다 파일을 다시
+    파싱하면 수천 행짜리 장부에서 클릭 한 번에 1초씩 걸린다. 파싱 결과를 재사용하면
+    변환만 다시 돌면 된다.
+    """
     if sheet is None:
         table = document.primary
     else:

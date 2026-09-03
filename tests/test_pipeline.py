@@ -210,3 +210,10 @@ def test_dropped_rows_report_issues_once_they_are_included(ledger_xlsx):
     job = load(ledger_xlsx, profile=profile)
     assert len(job.result.records) == 12
     assert any(row == 12 for row, _, _ in job.result.issues)
+
+
+def test_sampling_label_says_complete_when_it_covers_everything(ledger_xlsx):
+    """작은 파일에서 '상위 N행'이라 쓰면 못 본 행이 있는 것처럼 읽힌다."""
+    sampling = load(ledger_xlsx).preview()["sampling"]
+    assert sampling["complete"] is True
+    assert sampling["label"] == "전체 11행"

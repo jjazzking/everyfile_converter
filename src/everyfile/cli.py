@@ -59,6 +59,11 @@ def main(argv: list[str] | None = None) -> int:
     p_preview.add_argument("--sheet")
     p_preview.add_argument("-o", "--out", help="파일로 저장 (기본: 표준출력)")
 
+    p_serve = sub.add_parser("serve", help="미리보기 대시보드를 띄운다")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8000)
+    p_serve.add_argument("--reload", action="store_true")
+
     args = parser.parse_args(argv)
 
     try:
@@ -77,7 +82,22 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _convert(args)
     if args.command == "preview":
         return _preview(args)
+    if args.command == "serve":
+        return _serve(args)
     raise ValueError(f"알 수 없는 명령: {args.command}")
+
+
+def _serve(args: argparse.Namespace) -> int:
+    try:
+        import uvicorn
+    except ImportError:
+        raise ValueError(
+            "웹 의존성이 설치되어 있지 않습니다 — uv pip install -e '.[web]'"
+        ) from None
+
+    print(f"대시보드: http://{args.host}:{args.port}")
+    uvicorn.run("everyfile.api:app", host=args.host, port=args.port, reload=args.reload)
+    return 0
 
 
 def _inspect(args: argparse.Namespace) -> int:
